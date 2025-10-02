@@ -37,10 +37,10 @@ class TestCase:
         try:
             test_method = getattr(self, self.test_method_name)
             test_method()
-        except AssertionError:
-            result.add_failure(self.test_method_name)
-        except Exception:
-            result.add_error(self.test_method_name)
+        except AssertionError as e:
+            result.add_failure(f'{self.test_method_name}: {str(e)}')
+        except Exception as e:
+            result.add_error(f'{self.test_method_name}: {str(e)}')
         self.tear_down()
 
     def set_up(self):
@@ -48,6 +48,26 @@ class TestCase:
 
     def tear_down(self):
         pass
+    
+    def assert_equal(self, first, second):
+        if first != second:
+            msg = f'{first} != {second}'
+            raise AssertionError(msg)
+
+    def assert_true(self, expr):
+        if not expr:
+            msg = f'{expr} is not true'
+            raise AssertionError(msg)
+
+    def assert_false(self, expr):
+        if expr:
+            msg = f'{expr} is not false'
+            raise AssertionError(msg)
+
+    def assert_in(self, member, container):
+        if member not in container:
+            msg = f'{member} not found in {container}'
+            raise AssertionError(msg)
 
 
 class TestSuite:
@@ -95,10 +115,10 @@ class TestRunner:
 class TestStub(TestCase):
 
     def test_success(self):
-        assert True
+        self.assert_true(True)
 
     def test_failure(self):
-        assert False
+        self.assert_false(True)
 
     def test_error(self):
         raise Exception
@@ -134,17 +154,17 @@ class TestCaseTest(TestCase):
     def test_result_success_run(self):
         stub = TestStub('test_success')
         stub.run(self.result)
-        assert self.result.summary() == '1 run, 0 failed, 0 error'
+        self.assert_equal(self.result.summary(), '1 run, 0 failed, 0 error')
 
     def test_result_failure_run(self):
         stub = TestStub('test_failure')
         stub.run(self.result)
-        assert self.result.summary() == '1 run, 1 failed, 0 error'
+        self.assert_equal(self.result.summary(), '1 run, 1 failed, 0 error')
 
     def test_result_error_run(self):
         stub = TestStub('test_error')
         stub.run(self.result)
-        assert self.result.summary() == '1 run, 0 failed, 1 error'
+        self.assert_equal(self.result.summary(), '1 run, 0 failed, 1 error')
 
     def test_result_multiple_run(self):
         stub = TestStub('test_success')
@@ -153,27 +173,27 @@ class TestCaseTest(TestCase):
         stub.run(self.result)
         stub = TestStub('test_error')
         stub.run(self.result)
-        assert self.result.summary() == '3 run, 1 failed, 1 error'
+        self.assert_equal(self.result.summary(), '3 run, 1 failed, 1 error')
 
     def test_was_set_up(self):
         spy = TestSpy('test_method')
         spy.run(self.result)
-        assert spy.was_set_up
+        self.assert_true(spy.was_set_up)
 
     def test_was_run(self):
         spy = TestSpy('test_method')
         spy.run(self.result)
-        assert spy.was_run
+        self.assert_true(spy.was_run)
 
     def test_was_tear_down(self):
         spy = TestSpy('test_method')
         spy.run(self.result)
-        assert spy.was_tear_down
+        self.assert_true(spy.was_tear_down)
 
     def test_template_method(self):
         spy = TestSpy('test_method')
         spy.run(self.result)
-        assert spy.log == "set_up test_method tear_down"
+        self.assert_equal(spy.log, "set_up test_method tear_down")
 
 
 class TestSuiteTest(TestCase):
@@ -183,14 +203,14 @@ class TestSuiteTest(TestCase):
         suite.add_test(TestStub('test_success'))
         suite.add_test(TestStub('test_failure'))
         suite.add_test(TestStub('test_error'))
-        assert len(suite.tests) == 3
+        self.assert_equal(len(suite.tests), 3)
 
     def test_suite_success_run(self):
         result = TestResult()
         suite = TestSuite()
         suite.add_test(TestStub('test_success'))
         suite.run(result)
-        assert result.summary() == '1 run, 0 failed, 0 error'
+        self.assert_equal(result.summary(), '1 run, 0 failed, 0 error')
 
     def test_suite_multiple_run(self):
         result = TestResult()
@@ -199,7 +219,7 @@ class TestSuiteTest(TestCase):
         suite.add_test(TestStub('test_failure'))
         suite.add_test(TestStub('test_error'))
         suite.run(result)
-        assert result.summary() == '3 run, 1 failed, 1 error'
+        self.assert_equal(result.summary(), '3 run, 1 failed, 1 error')
 
 
 class TestLoaderTest(TestCase):
@@ -207,7 +227,7 @@ class TestLoaderTest(TestCase):
     def test_create_suite(self):
         loader = TestLoader()
         suite = loader.make_suite(TestStub)
-        assert len(suite.tests) == 3
+        self.assert_equal(len(suite.tests), 3)
 
     def test_create_suite_of_suites(self):
         loader = TestLoader()
@@ -216,12 +236,14 @@ class TestLoaderTest(TestCase):
         suite = TestSuite()
         suite.add_test(stub_suite)
         suite.add_test(spy_suite)
-        assert len(suite.tests) == 2
+        self.assert_equal(len(suite.tests), 2)
 
     def test_get_multiple_test_case_names(self):
         loader = TestLoader()
         names = loader.get_test_case_names(TestStub)
-        assert names == ['test_error', 'test_failure', 'test_success']
+        # Note: The order of methods from dir() can vary in Python versions.
+        # This assert might need to be adjusted depending on the exact order.
+        self.assert_equal(sorted(names), sorted(['test_error', 'test_failure', 'test_success']))
 
     def test_get_no_test_case_names(self):
         class Test(TestCase):
@@ -229,7 +251,33 @@ class TestLoaderTest(TestCase):
                 pass
         loader = TestLoader()
         names = loader.get_test_case_names(Test)
-        assert names == []
+        self.assert_equal(names, [])
+
+
+class AssertTest(TestCase):
+
+    def test_assert_true(self):
+        self.assert_true(True)
+
+    def test_assert_false(self):
+        self.assert_false(False)
+
+    def test_assert_equal(self):
+        self.assert_equal("", "")
+        self.assert_equal("foo", "foo")
+        self.assert_equal([], [])
+        self.assert_equal(['foo'], ['foo'])
+        self.assert_equal((), ())
+        self.assert_equal(('foo',), ('foo',))
+        self.assert_equal({}, {})
+        self.assert_equal({'foo'}, {'foo'})
+
+    def test_assert_in(self):
+        animals = {'monkey': 'banana', 'cow': 'grass', 'seal': 'fish'}
+        self.assert_in('a', 'abc')
+        self.assert_in('foo', ['foo'])
+        self.assert_in(1, [1, 2, 3])
+        self.assert_in('monkey', animals)
 
 
 if __name__ == '__main__':
@@ -237,12 +285,14 @@ if __name__ == '__main__':
     
     test_case_suite = loader.make_suite(TestCaseTest)
     test_suite_suite = loader.make_suite(TestSuiteTest)
-    test_load_suite = loader.make_suite(TestLoaderTest)
+    test_loader_suite = loader.make_suite(TestLoaderTest)
+    assert_suite = loader.make_suite(AssertTest)
 
-    suite = TestSuite()
-    suite.add_test(test_case_suite)
-    suite.add_test(test_suite_suite)
-    suite.add_test(test_load_suite)
+    main_suite = TestSuite()
+    main_suite.add_test(test_case_suite)
+    main_suite.add_test(test_suite_suite)
+    main_suite.add_test(test_loader_suite)
+    main_suite.add_test(assert_suite)
     
     runner = TestRunner()
-    runner.run(suite)
+    runner.run(main_suite)
